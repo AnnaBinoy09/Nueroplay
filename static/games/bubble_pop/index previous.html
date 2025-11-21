@@ -1,0 +1,744 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bubble Pop - Hand Tracking Game</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+            color: white;
+            overflow: hidden;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+        }
+
+        #gameContainer {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        #canvas {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 20px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+            backdrop-filter: blur(10px);
+            border: 2px solid rgba(255, 255, 255, 0.2);
+        }
+
+        #videoElement {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            width: 200px;
+            height: 150px;
+            border-radius: 15px;
+            border: 3px solid rgba(255, 255, 255, 0.3);
+            background: rgba(0, 0, 0, 0.5);
+            object-fit: cover;
+            z-index: 10;
+        }
+
+        #gameInfo {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 20px;
+            border-radius: 15px;
+            min-width: 250px;
+            z-index: 10;
+        }
+
+        #status {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.8);
+            padding: 15px 25px;
+            border-radius: 25px;
+            font-size: 16px;
+            z-index: 10;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .status-icon {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #ff4444;
+            animation: pulse 2s infinite;
+        }
+
+        .status-icon.active {
+            background: #44ff44;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.2); opacity: 0.7; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+
+        .bubble {
+            position: absolute;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            font-weight: bold;
+            color: white;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+            cursor: pointer;
+            transition: all 0.3s ease;
+            z-index: 5;
+            box-shadow: inset -10px -10px 20px rgba(0, 0, 0, 0.2),
+                        0 8px 20px rgba(0, 0, 0, 0.3);
+            animation: float 3s ease-in-out infinite;
+        }
+
+        .bubble.popped {
+            transform: scale(0);
+            opacity: 0;
+        }
+
+        @keyframes float {
+            0%, 100% { transform: translateY(0px) scale(1); }
+            25% { transform: translateY(-10px) scale(1.05); }
+            50% { transform: translateY(-5px) scale(1.02); }
+            75% { transform: translateY(-15px) scale(1.08); }
+        }
+
+        .bubble-pop-effect {
+            position: absolute;
+            pointer-events: none;
+            z-index: 15;
+            animation: popEffect 0.6s ease-out forwards;
+        }
+
+        @keyframes popEffect {
+            0% {
+                transform: scale(1);
+                opacity: 1;
+            }
+            100% {
+                transform: scale(3);
+                opacity: 0;
+            }
+        }
+
+        #gameResults {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.9);
+            padding: 40px;
+            border-radius: 20px;
+            text-align: center;
+            display: none;
+            z-index: 20;
+            max-width: 500px;
+        }
+
+        #gameResults h2 {
+            margin-bottom: 20px;
+            color: #4facfe;
+        }
+
+        .result-stat {
+            margin: 10px 0;
+            font-size: 18px;
+        }
+
+        .restart-btn {
+            background: linear-gradient(45deg, #4facfe, #00f2fe);
+            border: none;
+            padding: 15px 30px;
+            border-radius: 25px;
+            color: white;
+            font-size: 16px;
+            cursor: pointer;
+            margin-top: 20px;
+            transition: transform 0.2s ease;
+        }
+
+        .restart-btn:hover {
+            transform: scale(1.05);
+        }
+
+        #permissionPrompt {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.9);
+            padding: 40px;
+            border-radius: 20px;
+            text-align: center;
+            z-index: 30;
+            max-width: 400px;
+        }
+
+        .camera-icon {
+            font-size: 48px;
+            margin-bottom: 20px;
+        }
+
+        .allow-btn {
+            background: #4facfe;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 25px;
+            color: white;
+            font-size: 16px;
+            cursor: pointer;
+            margin-top: 20px;
+        }
+
+        .game-stats {
+            display: flex;
+            gap: 20px;
+            margin-top: 15px;
+        }
+
+        .stat-item {
+            flex: 1;
+            text-align: center;
+        }
+
+        .stat-value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #4facfe;
+            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+        }
+
+        .stat-label {
+            font-size: 12px;
+            opacity: 0.8;
+        }
+    </style>
+</head>
+<body>
+    <div id="gameContainer">
+        <canvas id="canvas" width="800" height="600"></canvas>
+        <video id="videoElement" playsinline muted></video>
+        
+        <div id="gameInfo">
+            <h3>🫧 Bubble Pop Game</h3>
+            <p>Pop bubbles by pointing your finger at them!</p>
+            <div class="game-stats">
+                <div class="stat-item">
+                    <div class="stat-value" id="scoreValue">0</div>
+                    <div class="stat-label">Score</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value" id="timeValue">60</div>
+                    <div class="stat-label">Time</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value" id="levelValue">1</div>
+                    <div class="stat-label">Level</div>
+                </div>
+            </div>
+        </div>
+
+        <div id="status">
+            <div class="status-icon" id="statusIcon"></div>
+            <span id="statusText">Initializing camera...</span>
+        </div>
+
+        <div id="gameResults">
+            <h2>🎉 Game Over!</h2>
+            <div class="result-stat">Final Score: <span id="finalScore">0</span></div>
+            <div class="result-stat">Bubbles Popped: <span id="bubblesPopped">0</span></div>
+            <div class="result-stat">Accuracy: <span id="accuracyScore">0%</span></div>
+            <div class="result-stat">Reaction Time: <span id="reactionTime">0ms</span></div>
+            <button class="restart-btn" onclick="startNewGame()">Play Again</button>
+        </div>
+
+        <div id="permissionPrompt">
+            <div class="camera-icon">📷</div>
+            <h3>Camera Access Required</h3>
+            <p>This game uses your webcam to track hand movements. Please allow camera access to continue.</p>
+            <button class="allow-btn" onclick="requestCameraAccess()">Allow Camera Access</button>
+        </div>
+    </div>
+
+    <!-- MediaPipe Hands -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
+
+    <script>
+        // Game state
+        let gameState = {
+            isActive: false,
+            score: 0,
+            level: 1,
+            timeLeft: 60,
+            bubbles: [],
+            currentHandPosition: null,
+            gameTimer: null,
+            bubbleSpawnTimer: null,
+            startTime: null,
+            totalBubbles: 0,
+            poppedBubbles: 0,
+            reactionTimes: [],
+            sessionData: {
+                gameType: 'bubble_pop',
+                startTime: null,
+                endTime: null,
+                totalTime: 0,
+                score: 0,
+                bubblesPopped: 0,
+                totalBubbles: 0,
+                accuracy: 0,
+                averageReactionTime: 0,
+                level: 1,
+                handTrackingData: [],
+                completed: false
+            }
+        };
+
+        // MediaPipe setup
+        let hands, camera, videoElement, canvas, ctx;
+
+        // Bubble colors
+        const bubbleColors = [
+            '#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', 
+            '#FECA57', '#FF9FF3', '#54A0FF', '#5F27CD'
+        ];
+
+        // Initialize the game
+        async function initGame() {
+            canvas = document.getElementById('canvas');
+            ctx = canvas.getContext('2d');
+            videoElement = document.getElementById('videoElement');
+
+            // Show permission prompt
+            document.getElementById('permissionPrompt').style.display = 'block';
+        }
+
+        async function requestCameraAccess() {
+            try {
+                // Hide permission prompt
+                document.getElementById('permissionPrompt').style.display = 'none';
+                updateStatus('Setting up camera...', false);
+
+                // Setup MediaPipe Hands
+                hands = new Hands({
+                    locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
+                });
+
+                hands.setOptions({
+                    maxNumHands: 1,
+                    modelComplexity: 1,
+                    minDetectionConfidence: 0.7,
+                    minTrackingConfidence: 0.5
+                });
+
+                hands.onResults(onResults);
+
+                // Setup camera
+                camera = new Camera(videoElement, {
+                    onFrame: async () => {
+                        await hands.send({ image: videoElement });
+                    },
+                    width: 640,
+                    height: 480
+                });
+
+                await camera.start();
+                updateStatus('Camera ready! Start popping bubbles!', true);
+                
+                // Start the game
+                startNewGame();
+
+            } catch (error) {
+                console.error('Camera access failed:', error);
+                updateStatus('Camera access failed. Please refresh and try again.', false);
+                document.getElementById('permissionPrompt').style.display = 'block';
+            }
+        }
+
+        function onResults(results) {
+            // Clear canvas
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Draw video background (flipped)
+            ctx.save();
+            ctx.scale(-1, 1);
+            ctx.translate(-canvas.width, 0);
+            ctx.drawImage(results.image, 0, 0, canvas.width, canvas.height);
+            ctx.restore();
+
+            // Process hand landmarks
+            if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+                const landmarks = results.multiHandLandmarks[0];
+                
+                // Get index finger tip position (landmark 8)
+                const indexTip = landmarks[8];
+                gameState.currentHandPosition = {
+                    x: (1 - indexTip.x) * canvas.width, // Flip horizontally
+                    y: indexTip.y * canvas.height
+                };
+
+                // Draw hand landmarks
+                drawConnectors(ctx, landmarks, HAND_CONNECTIONS, { color: '#00FF00', lineWidth: 2 });
+                drawLandmarks(ctx, landmarks, { color: '#FF0000', lineWidth: 1, radius: 3 });
+
+                // Highlight index finger tip
+                ctx.beginPath();
+                ctx.arc(gameState.currentHandPosition.x, gameState.currentHandPosition.y, 20, 0, 2 * Math.PI);
+                ctx.fillStyle = 'rgba(255, 255, 0, 0.6)';
+                ctx.fill();
+                ctx.strokeStyle = '#FFD700';
+                ctx.lineWidth = 4;
+                ctx.stroke();
+
+                // Record hand position for analysis
+                if (gameState.isActive) {
+                    gameState.sessionData.handTrackingData.push({
+                        timestamp: Date.now(),
+                        x: gameState.currentHandPosition.x,
+                        y: gameState.currentHandPosition.y
+                    });
+
+                    // Check bubble collisions
+                    checkBubbleCollisions();
+                }
+            }
+
+            // Draw bubbles
+            drawBubbles();
+        }
+
+        function drawBubbles() {
+            gameState.bubbles.forEach(bubble => {
+                if (!bubble.popped) {
+                    // Create bubble element if it doesn't exist
+                    let bubbleElement = document.getElementById(`bubble-${bubble.id}`);
+                    if (!bubbleElement) {
+                        bubbleElement = document.createElement('div');
+                        bubbleElement.className = 'bubble';
+                        bubbleElement.id = `bubble-${bubble.id}`;
+                        bubbleElement.style.background = bubble.color;
+                        bubbleElement.style.width = `${bubble.size}px`;
+                        bubbleElement.style.height = `${bubble.size}px`;
+                        bubbleElement.textContent = bubble.value || '';
+                        document.getElementById('gameContainer').appendChild(bubbleElement);
+                    }
+
+                    // Update bubble position
+                    bubbleElement.style.left = `${bubble.x - bubble.size/2}px`;
+                    bubbleElement.style.top = `${bubble.y - bubble.size/2}px`;
+                }
+            });
+
+            // Remove popped bubbles
+            gameState.bubbles = gameState.bubbles.filter(bubble => {
+                if (bubble.popped && Date.now() - bubble.popTime > 600) {
+                    const element = document.getElementById(`bubble-${bubble.id}`);
+                    if (element) element.remove();
+                    return false;
+                }
+                return true;
+            });
+        }
+
+        function checkBubbleCollisions() {
+            if (!gameState.currentHandPosition) return;
+
+            gameState.bubbles.forEach(bubble => {
+                if (!bubble.popped) {
+                    const distance = Math.sqrt(
+                        Math.pow(gameState.currentHandPosition.x - bubble.x, 2) + 
+                        Math.pow(gameState.currentHandPosition.y - bubble.y, 2)
+                    );
+
+                    // If finger is touching the bubble
+                    if (distance < bubble.size / 2 + 10) {
+                        popBubble(bubble);
+                    }
+                }
+            });
+        }
+
+        function popBubble(bubble) {
+            if (bubble.popped) return;
+
+            bubble.popped = true;
+            bubble.popTime = Date.now();
+
+            // Calculate reaction time
+            const reactionTime = Date.now() - bubble.spawnTime;
+            gameState.reactionTimes.push(reactionTime);
+
+            // Update score
+            const points = Math.max(1, Math.floor((bubble.size / 10) * gameState.level));
+            gameState.score += points;
+            gameState.poppedBubbles++;
+
+            // Add bubble element popped class
+            const bubbleElement = document.getElementById(`bubble-${bubble.id}`);
+            if (bubbleElement) {
+                bubbleElement.classList.add('popped');
+                
+                // Create pop effect
+                createPopEffect(bubble.x, bubble.y, bubble.color);
+            }
+
+            // Update UI
+            updateGameUI();
+
+            // Check for level up
+            if (gameState.poppedBubbles > 0 && gameState.poppedBubbles % 10 === 0) {
+                levelUp();
+            }
+        }
+
+        function createPopEffect(x, y, color) {
+            const effect = document.createElement('div');
+            effect.className = 'bubble-pop-effect';
+            effect.style.left = `${x - 25}px`;
+            effect.style.top = `${y - 25}px`;
+            effect.style.width = '50px';
+            effect.style.height = '50px';
+            effect.style.background = `radial-gradient(circle, ${color} 0%, transparent 70%)`;
+            effect.style.borderRadius = '50%';
+            
+            document.getElementById('gameContainer').appendChild(effect);
+
+            // Remove effect after animation
+            setTimeout(() => {
+                if (effect.parentNode) {
+                    effect.remove();
+                }
+            }, 600);
+        }
+
+        function spawnBubble() {
+            if (!gameState.isActive) return;
+
+            const bubble = {
+                id: Date.now() + Math.random(),
+                x: Math.random() * (canvas.width - 100) + 50,
+                y: Math.random() * (canvas.height - 100) + 50,
+                size: Math.random() * 40 + 40, // 40-80px
+                color: bubbleColors[Math.floor(Math.random() * bubbleColors.length)],
+                spawnTime: Date.now(),
+                popped: false,
+                value: Math.floor(Math.random() * 10) + 1
+            };
+
+            gameState.bubbles.push(bubble);
+            gameState.totalBubbles++;
+
+            // Schedule next bubble
+            const spawnDelay = Math.max(500, 2000 - (gameState.level * 100));
+            gameState.bubbleSpawnTimer = setTimeout(spawnBubble, spawnDelay);
+        }
+
+        function levelUp() {
+            gameState.level++;
+            updateStatus(`Level Up! Now Level ${gameState.level}`, true);
+            
+            // Add bonus time
+            gameState.timeLeft += 10;
+        }
+
+        function startNewGame() {
+            // Reset game state
+            gameState = {
+                isActive: true,
+                score: 0,
+                level: 1,
+                timeLeft: 60,
+                bubbles: [],
+                currentHandPosition: null,
+                gameTimer: null,
+                bubbleSpawnTimer: null,
+                startTime: Date.now(),
+                totalBubbles: 0,
+                poppedBubbles: 0,
+                reactionTimes: [],
+                sessionData: {
+                    gameType: 'bubble_pop',
+                    startTime: Date.now(),
+                    endTime: null,
+                    totalTime: 0,
+                    score: 0,
+                    bubblesPopped: 0,
+                    totalBubbles: 0,
+                    accuracy: 0,
+                    averageReactionTime: 0,
+                    level: 1,
+                    handTrackingData: [],
+                    completed: false
+                }
+            };
+
+            // Clear existing bubbles and effects
+            document.querySelectorAll('.bubble, .bubble-pop-effect').forEach(el => el.remove());
+            document.getElementById('gameResults').style.display = 'none';
+            
+            // Update UI
+            updateGameUI();
+            updateStatus('Game started! Pop the bubbles!', true);
+
+            // Start game timer
+            gameState.gameTimer = setInterval(() => {
+                gameState.timeLeft--;
+                updateGameUI();
+                
+                if (gameState.timeLeft <= 0) {
+                    endGame();
+                }
+            }, 1000);
+
+            // Start spawning bubbles
+            spawnBubble();
+        }
+
+        function endGame() {
+            gameState.isActive = false;
+            
+            // Clear timers
+            if (gameState.gameTimer) clearInterval(gameState.gameTimer);
+            if (gameState.bubbleSpawnTimer) clearTimeout(gameState.bubbleSpawnTimer);
+
+            // Calculate final stats
+            const totalTime = (Date.now() - gameState.startTime) / 1000;
+            const accuracy = gameState.totalBubbles > 0 ? 
+                Math.round((gameState.poppedBubbles / gameState.totalBubbles) * 100) : 0;
+            const averageReactionTime = gameState.reactionTimes.length > 0 ?
+                Math.round(gameState.reactionTimes.reduce((a, b) => a + b, 0) / gameState.reactionTimes.length) : 0;
+
+            // Update session data
+            gameState.sessionData.endTime = Date.now();
+            gameState.sessionData.totalTime = totalTime;
+            gameState.sessionData.score = gameState.score;
+            gameState.sessionData.bubblesPopped = gameState.poppedBubbles;
+            gameState.sessionData.totalBubbles = gameState.totalBubbles;
+            gameState.sessionData.accuracy = accuracy;
+            gameState.sessionData.averageReactionTime = averageReactionTime;
+            gameState.sessionData.level = gameState.level;
+            gameState.sessionData.completed = true;
+
+            // Show results
+            document.getElementById('finalScore').textContent = gameState.score;
+            document.getElementById('bubblesPopped').textContent = gameState.poppedBubbles;
+            document.getElementById('accuracyScore').textContent = `${accuracy}%`;
+            document.getElementById('reactionTime').textContent = `${averageReactionTime}ms`;
+            document.getElementById('gameResults').style.display = 'block';
+
+            updateStatus(`Game Over! Final Score: ${gameState.score}`, false);
+
+            // Send results to parent window (Flask app)
+            if (window.parent !== window) {
+                window.parent.postMessage({
+                    type: 'game_session_complete',
+                    data: gameState.sessionData
+                }, '*');
+            }
+        }
+
+        function updateGameUI() {
+            document.getElementById('scoreValue').textContent = gameState.score;
+            document.getElementById('timeValue').textContent = gameState.timeLeft;
+            document.getElementById('levelValue').textContent = gameState.level;
+        }
+
+        function updateStatus(message, isActive) {
+            document.getElementById('statusText').textContent = message;
+            const statusIcon = document.getElementById('statusIcon');
+            
+            if (isActive) {
+                statusIcon.classList.add('active');
+            } else {
+                statusIcon.classList.remove('active');
+            }
+        }
+
+        // Drawing utilities for MediaPipe
+        function drawConnectors(ctx, landmarks, connections, options) {
+            ctx.save();
+            ctx.strokeStyle = options.color || '#00FF00';
+            ctx.lineWidth = options.lineWidth || 2;
+            ctx.scale(-1, 1);
+            ctx.translate(-canvas.width, 0);
+
+            for (const connection of connections) {
+                const from = landmarks[connection[0]];
+                const to = landmarks[connection[1]];
+                
+                ctx.beginPath();
+                ctx.moveTo(from.x * canvas.width, from.y * canvas.height);
+                ctx.lineTo(to.x * canvas.width, to.y * canvas.height);
+                ctx.stroke();
+            }
+            ctx.restore();
+        }
+
+        function drawLandmarks(ctx, landmarks, options) {
+            ctx.save();
+            ctx.fillStyle = options.color || '#FF0000';
+            ctx.scale(-1, 1);
+            ctx.translate(-canvas.width, 0);
+
+            for (const landmark of landmarks) {
+                ctx.beginPath();
+                ctx.arc(
+                    landmark.x * canvas.width,
+                    landmark.y * canvas.height,
+                    options.radius || 3,
+                    0,
+                    2 * Math.PI
+                );
+                ctx.fill();
+            }
+            ctx.restore();
+        }
+
+        // MediaPipe hand connections
+        const HAND_CONNECTIONS = [
+            [0, 1], [1, 2], [2, 3], [3, 4],
+            [0, 5], [5, 6], [6, 7], [7, 8],
+            [0, 9], [9, 10], [10, 11], [11, 12],
+            [0, 13], [13, 14], [14, 15], [15, 16],
+            [0, 17], [17, 18], [18, 19], [19, 20]
+        ];
+
+        // Initialize game when page loads
+        window.addEventListener('load', initGame);
+        
+        // Handle page visibility changes
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden) {
+                gameState.isActive = false;
+            }
+        });
+    </script>
+</body>
+</html>
