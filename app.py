@@ -33,11 +33,50 @@ import re
 import google.generativeai as genai
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-if GEMINI_API_KEY:
-    genai.configure(api_key=GEMINI_API_KEY)
-    gemini_model = genai.GenerativeModel("gemini-1.5-flash")
-else:
+GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta/models"
+
+if not GEMINI_API_KEY:
     print("⚠ GEMINI_API_KEY is not set – Gemini chatbot/report will be disabled.")
+
+# -----------------------------
+# Gemini helpers
+# -----------------------------
+
+def call_gemini(prompt: str, model: str = "gemini-1.5-flash", timeout: float = 8.0) -> str:
+    """
+    Call the Gemini API over simple HTTPS (REST) instead of the Python SDK.
+    Returns the text of the first candidate, or raises an error.
+    """
+    if not GEMINI_API_KEY:
+        raise RuntimeError("GEMINI_API_KEY is not set")
+
+    url = f"{GEMINI_API_BASE}/{model}:generateContent?key={GEMINI_API_KEY}"
+    payload = {
+        "contents": [
+            {"parts": [{"text": prompt}]}
+        ],
+        "generationConfig": {
+            "temperature": 0.7,
+            "maxOutputTokens": 512,
+        },
+    }
+
+    resp = requests.post(url, json=payload, timeout=timeout)
+    if resp.status_code != 200:
+        # This will show in Railway logs if the key/permissions are wrong
+        raise RuntimeError(f"Gemini HTTP {resp.status_code}: {resp.text[:300]}")
+
+    data = resp.json()
+    candidates = data.get("candidates") or []
+    if not candidates:
+        raise RuntimeError(f"No candidates in Gemini response: {data}")
+
+    parts = candidates[0].get("content", {}).get("parts") or []
+    if not parts:
+        raise RuntimeError(f"No parts in Gemini response: {data}")
+
+    return (parts[0].get("text") or "").strip()
+
 
 app = Flask(__name__)
 app.config["SECRET_KEY"] = "neuroplay-secret-key-2025"
@@ -652,8 +691,7 @@ def update_progress():
 @app.route("/api/chat", methods=["POST"])
 @login_required
 def chat():
-    if not GEMINI_API_KEY:
-        return jsonify({"error": "Gemini is not configured on the server."}), 500
+    """Parent/Therapist chatbot using Gemini – via REST."""
 
     data = request.get_json(silent=True) or {}
     user_message = (data.get("message") or "").strip()
@@ -688,19 +726,17 @@ def chat():
         f"Answer clearly and kindly in under about 250 words."
     )
     
+  
     try:
-        resp = gemini_model.generate_content(
-            prompt,
-            request_options={"timeout": 8},  # seconds
-        )
-        reply_text = (resp.text or "").strip()
+        reply_text = call_gemini(prompt, model="gemini-1.5-flash", timeout=8.0)
         if not reply_text:
             raise RuntimeError("Empty response from Gemini")
         return jsonify({"reply": reply_text})
     except Exception as e:
-        print("Gemini chat error:", repr(e))
+        # This will show up in Railway logs
+        print("Gemini chat error (REST):", repr(e))
         return jsonify({
-            "error": "Sorry, the AI helper is having trouble right now. Please try again later."
+            "error": "Sorry, I couldn't answer right now."
         }), 502
 
 #Gemini narrative report
@@ -708,8 +744,6 @@ def chat():
 @app.route("/api/generate_report", methods=["POST"])
 @login_required
 def generate_report():
-    if not GEMINI_API_KEY:
-        return jsonify({"error": "Gemini is not configured on the server."}), 500
 
     data = request.get_json(silent=True) or {}
     audience = data.get("audience", "parent")  # "parent" or "therapist"
@@ -741,10 +775,10 @@ def generate_report():
     )
 
     try:
-        model = genai.GenerativeModel("gemini-1.5-flash")
-        resp = model.generate_content(prompt)
-        report_text = resp.text or "I’m having trouble creating a report right now."
-
+        report_text = call_gemini(prompt, model="gemini-1.5-flash", timeout=10.0)
+        if not report_text:
+            raise RuntimeError("Empty response from Gemini")
+            
         # Optionally store this as a new AIInsight narrative
         new_insight = AIInsight(
             user_id=current_user.id,
