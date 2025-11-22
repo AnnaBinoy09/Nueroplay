@@ -249,12 +249,10 @@ def games():
 @app.route("/play/follow_dot_enhanced")
 @login_required
 def play_follow_dot_enhanced():
-    """Launch enhanced Follow the Dot game"""
+    """Play web Follow the Dot game (browser version)."""
     return render_template(
-        "game_launcher.html",
-        game_name="Follow the Dot Enhanced",
-        game_script="enhanced_follow_dot.py",
-        game_id="follow_dot",
+        "follow_dot_web.html",                # new template
+        record_session_url=url_for("record_session"),
         user_id=current_user.id,
     )
 
@@ -262,12 +260,10 @@ def play_follow_dot_enhanced():
 @app.route("/play/bubble_pop_enhanced")
 @login_required
 def play_bubble_pop_enhanced():
-    """Launch enhanced Bubble Pop game"""
+   """Play web Bubble Pop game (browser version)."""
     return render_template(
-        "game_launcher.html",
-        game_name="Bubble Pop Enhanced",
-        game_script="enhanced_bubble_pop.py",
-        game_id="bubble_pop",
+        "bubble_pop_web.html",               # new template
+        record_session_url=url_for("record_session"),
         user_id=current_user.id,
     )
 
@@ -284,48 +280,48 @@ def play_game(game_name):
         abort(404)
 
 
-@app.route("/api/launch_game/<game_type>", methods=["POST"])
-@login_required
-def launch_game(game_type):
-    """API endpoint to launch pygame games"""
-    try:
-        game_scripts = {
-            "follow_dot": "enhanced_follow_dot.py",
-            "bubble_pop": "enhanced_bubble_pop.py",
-        }
+# @app.route("/api/launch_game/<game_type>", methods=["POST"])
+# @login_required
+# def launch_game(game_type):
+#     """API endpoint to launch pygame games"""
+#     try:
+#         game_scripts = {
+#             "follow_dot": "enhanced_follow_dot.py",
+#             "bubble_pop": "enhanced_bubble_pop.py",
+#         }
 
-        if game_type not in game_scripts:
-            return jsonify({"status": "error", "message": "Invalid game type"}), 400
+#         if game_type not in game_scripts:
+#             return jsonify({"status": "error", "message": "Invalid game type"}), 400
 
-        script_name = game_scripts[game_type]
-        script_path = os.path.join("games_src", script_name)
+#         script_name = game_scripts[game_type]
+#         script_path = os.path.join("games_src", script_name)
 
-        config = GameConfig()
-        config.save_config(current_user.id)
+#         config = GameConfig()
+#         config.save_config(current_user.id)
 
-        def run_game():
-            try:
-                venv_python = os.path.join(os.getcwd(), "neuroplay-env", "Scripts", "python.exe")
-                subprocess.Popen([venv_python, script_path])
+#         def run_game():
+#             try:
+#                 venv_python = os.path.join(os.getcwd(), "neuroplay-env", "Scripts", "python.exe")
+#                 subprocess.Popen([venv_python, script_path])
 
-            except Exception as e:
-                print(f"Error in game subprocess: {e}")
+#             except Exception as e:
+#                 print(f"Error in game subprocess: {e}")
 
-        thread = threading.Thread(target=run_game)
-        thread.daemon = True
-        thread.start()
+#         thread = threading.Thread(target=run_game)
+#         thread.daemon = True
+#         thread.start()
 
-        return jsonify(
-            {
-                "status": "success",
-                "message": f"Game {game_type} launched successfully",
-                "user_id": current_user.id,
-            }
-        )
+#         return jsonify(
+#             {
+#                 "status": "success",
+#                 "message": f"Game {game_type} launched successfully",
+#                 "user_id": current_user.id,
+#             }
+#         )
 
-    except Exception as e:
-        print(f"Error launching game: {e}")
-        return jsonify({"status": "error", "message": str(e)}), 500
+#     except Exception as e:
+#         print(f"Error launching game: {e}")
+#         return jsonify({"status": "error", "message": str(e)}), 500 
 
 
 # -----------------------------
