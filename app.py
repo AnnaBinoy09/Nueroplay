@@ -30,6 +30,8 @@ from models import db, User, GameSession, ProgressData, AIInsight
 from ai_analysis import AnalysisEngine
 from game_config import GameConfig
 import re
+import requests
+
 
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
