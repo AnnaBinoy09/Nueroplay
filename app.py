@@ -35,8 +35,7 @@ import requests
 
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent
-"
+GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent"
 
 if not GEMINI_API_KEY:
     print("⚠ GEMINI_API_KEY is not set – Gemini chatbot/report will be disabled.")
