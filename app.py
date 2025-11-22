@@ -30,11 +30,20 @@ from models import db, User, GameSession, ProgressData, AIInsight
 from ai_analysis import AnalysisEngine
 from game_config import GameConfig
 import re
+import google.generativeai as genai
+
 
 app = Flask(__name__)
 app.config["SECRET_KEY"] = "neuroplay-secret-key-2025"
 app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///neuroplay.db"
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+if GEMINI_API_KEY:
+    genai.configure(api_key=GEMINI_API_KEY)
+else:
+    print("⚠ GEMINI_API_KEY is not set – Gemini chatbot/report will be disabled.")
+
 
 # -----------------------------
 # Extensions
@@ -46,6 +55,75 @@ login_manager.login_view = "login"
 
 # AI engine
 analysis_engine = AnalysisEngine()
+
+def build_ai_context_for_user(user: User) -> str:
+    """
+    Build a compact, structured text summary of recent sessions, progress data
+    and AIInsight for this user. This is fed into Gemini so it can write
+    friendly narrative explanations.
+    """
+    user_id = user.id
+
+    # Last 10 game sessions
+    sessions = (
+        GameSession.query.filter_by(user_id=user_id)
+        .order_by(GameSession.session_date.desc())
+        .limit(10)
+        .all()
+    )
+
+    # Last 3 progress entries
+    progress_entries = (
+        ProgressData.query.filter_by(user_id=user_id)
+        .order_by(ProgressData.assessment_date.desc())
+        .limit(3)
+        .all()
+    )
+
+    # Latest AIInsight from your AnalysisEngine
+    latest_insight = (
+        AIInsight.query.filter_by(user_id=user_id)
+        .order_by(AIInsight.generated_date.desc())
+        .first()
+    )
+
+    parts: list[str] = []
+
+    parts.append("Recent game sessions (up to 10):")
+    if sessions:
+        for s in sessions:
+            parts.append(
+                f"- {s.game_name or 'unknown'} on "
+                f"{(s.session_date.strftime('%Y-%m-%d') if s.session_date else 'N/A')}; "
+                f"score={s.score}, accuracy={round(s.accuracy_percentage or 0, 1)}%, "
+                f"duration_s={round(s.session_duration or 0, 1)}"
+            )
+    else:
+        parts.append("- No game sessions recorded yet.")
+
+    parts.append("\nRecent progress assessments (up to 3):")
+    if progress_entries:
+        for p in progress_entries:
+            parts.append(
+                f"- {p.assessment_date.strftime('%Y-%m-%d') if p.assessment_date else 'N/A'}; "
+                f"motor={p.motor_skills_score}, cognitive={p.cognitive_skills_score}, "
+                f"coordination={p.hand_eye_coordination}, attention={p.attention_score}"
+            )
+    else:
+        parts.append("- No progress assessments yet.")
+
+    parts.append("\nLatest numeric AI insight from AnalysisEngine:")
+    if latest_insight:
+        parts.append(
+            f"- trajectory={latest_insight.progress_trajectory or 'unknown'}, "
+            f"motor_risk={latest_insight.motor_risk_score or 0}, "
+            f"attention_risk={latest_insight.attention_risk_score or 0}, "
+            f"overall_risk={latest_insight.overall_development_risk or 0}"
+        )
+    else:
+        parts.append("- No AIInsight rows yet for this user.")
+
+    return "\n".join(parts)
 
 
 # -----------------------------
@@ -503,6 +581,114 @@ def progress():
             this_week_sessions=[],
             user=current_user,
         )
+
+#Gemini chatbot for parents / therapists
+
+@app.route("/api/chat", methods=["POST"])
+@login_required
+def chat():
+    if not GEMINI_API_KEY:
+        return jsonify({"error": "Gemini is not configured on the server."}), 500
+
+    data = request.get_json(silent=True) or {}
+    user_message = (data.get("message") or "").strip()
+    audience = data.get("audience", "parent")  # "parent" or "therapist"
+
+    if not user_message:
+        return jsonify({"error": "Empty message"}), 400
+
+    context_text = build_ai_context_for_user(current_user)
+
+    if audience == "therapist":
+        system_role = (
+            "You are a supportive assistant for pediatric therapists. "
+            "You see structured game-based data from NeuroPlay, an autism-friendly therapeutic game platform. "
+            "Help interpret the data trends, suggest discussion points for therapy sessions, "
+            "but DO NOT provide diagnoses or medical treatment plans."
+        )
+    else:
+        system_role = (
+            "You are a calm, friendly assistant for parents of an autistic child. "
+            "Explain NeuroPlay game results in simple, everyday language. "
+            "Focus on strengths, gentle encouragement, and practical ideas for supportive activities. "
+            "Do NOT give medical advice or diagnoses. Always encourage parents to talk to their therapist "
+            "or doctor for serious concerns."
+        )
+
+    prompt = (
+        f"{system_role}\n\n"
+        f"Here is structured data about the child's recent NeuroPlay activity:\n"
+        f"{context_text}\n\n"
+        f"The parent/therapist says:\n\"{user_message}\"\n\n"
+        f"Answer clearly and kindly in under about 250 words."
+    )
+
+    try:
+        model = genai.GenerativeModel("gemini-1.5-flash")
+        resp = model.generate_content(prompt)
+        reply_text = resp.text or "I’m having trouble responding right now. Please try again later."
+        return jsonify({ "reply": reply_text })
+    except Exception as e:
+        print("Gemini chat error:", e)
+        return jsonify({"error": "Failed to generate response"}), 500
+
+#Gemini narrative report
+
+@app.route("/api/generate_report", methods=["POST"])
+@login_required
+def generate_report():
+    if not GEMINI_API_KEY:
+        return jsonify({"error": "Gemini is not configured on the server."}), 500
+
+    data = request.get_json(silent=True) or {}
+    audience = data.get("audience", "parent")  # "parent" or "therapist"
+
+    context_text = build_ai_context_for_user(current_user)
+
+    if audience == "therapist":
+        system_role = (
+            "You are generating a concise summary report for a pediatric therapist. "
+            "Use the structured NeuroPlay data to describe trends in motor skills, coordination, "
+            "attention and game engagement. Be professional but gentle. "
+            "Do NOT diagnose or prescribe treatment. Suggest possible topics for discussion "
+            "in the next therapy session."
+        )
+    else:
+        system_role = (
+            "You are generating a short, easy-to-read progress report for a parent of an autistic child. "
+            "Use simple language. Focus on what is going well, where practice might help, and a few gentle "
+            "activity ideas at home. Do NOT give medical advice or diagnoses. Encourage the parent to talk "
+            "with their child's therapist or doctor for any serious concerns."
+        )
+
+    prompt = (
+        f"{system_role}\n\n"
+        f"Here is structured data about the child's recent NeuroPlay activity:\n"
+        f"{context_text}\n\n"
+        f"Write a friendly report with clear headings and short paragraphs. "
+        f"Keep it under about 600 words."
+    )
+
+    try:
+        model = genai.GenerativeModel("gemini-1.5-flash")
+        resp = model.generate_content(prompt)
+        report_text = resp.text or "I’m having trouble creating a report right now."
+
+        # Optionally store this as a new AIInsight narrative
+        new_insight = AIInsight(
+            user_id=current_user.id,
+            generated_date=datetime.utcnow(),
+            summary="Gemini narrative progress report",
+            detailed_insight=report_text,
+        )
+        db.session.add(new_insight)
+        db.session.commit()
+
+        return jsonify({"report": report_text, "insight_id": new_insight.id})
+    except Exception as e:
+        print("Gemini report error:", e)
+        db.session.rollback()
+        return jsonify({"error": "Failed to generate report"}), 500
 
 
 @app.route("/insights")
