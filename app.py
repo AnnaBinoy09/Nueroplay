@@ -260,7 +260,7 @@ def play_follow_dot_enhanced():
 @app.route("/play/bubble_pop_enhanced")
 @login_required
 def play_bubble_pop_enhanced():
-   """Play web Bubble Pop game (browser version)."""
+    """Play web Bubble Pop game (browser version)."""
     return render_template(
         "bubble_pop_web.html",               # new template
         record_session_url=url_for("record_session"),
