@@ -32,17 +32,18 @@ from game_config import GameConfig
 import re
 import google.generativeai as genai
 
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+if GEMINI_API_KEY:
+    genai.configure(api_key=GEMINI_API_KEY)
+else:
+    print("⚠ GEMINI_API_KEY is not set – Gemini chatbot/report will be disabled.")
 
 app = Flask(__name__)
 app.config["SECRET_KEY"] = "neuroplay-secret-key-2025"
 app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///neuroplay.db"
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-if GEMINI_API_KEY:
-    genai.configure(api_key=GEMINI_API_KEY)
-else:
-    print("⚠ GEMINI_API_KEY is not set – Gemini chatbot/report will be disabled.")
+
 
 
 # -----------------------------
@@ -582,6 +583,69 @@ def progress():
             user=current_user,
         )
 
+
+
+@app.route("/insights")
+@login_required
+def insights():
+    """AI insights page"""
+    ai_insights = (
+        AIInsight.query.filter_by(user_id=current_user.id)
+        .order_by(AIInsight.generated_date.desc())
+        .all()
+    )
+    sessions = GameSession.query.filter_by(user_id=current_user.id).all()
+
+    # NOTE: template file is 'insights.html' in your /templates folder
+    return render_template("insights.html", insights=ai_insights, sessions=sessions)
+
+
+@app.route("/admin/clear_insights")
+@login_required
+def clear_insights():
+    AIInsight.query.filter_by(user_id=current_user.id).delete()
+    db.session.commit()
+    flash("Old insights cleared. New insights will be generated on next visit.")
+    return redirect(url_for("insights"))
+
+
+@app.route("/profile")
+@login_required
+def profile():
+    return render_template("profile.html")
+
+
+@app.route("/api/update_progress", methods=["POST"])
+@login_required
+def update_progress():
+    data = request.get_json()
+
+    try:
+        progress = ProgressData(
+            user_id=current_user.id,
+            motor_skills_score=data.get("motor_skills", 0),
+            cognitive_skills_score=data.get("cognitive_skills", 0),
+            hand_eye_coordination=data.get("coordination", 0),
+            reaction_time=data.get("reaction_time", 0),
+            fine_motor_score=data.get("fine_motor", 0),
+            gross_motor_score=data.get("gross_motor", 0),
+            attention_score=data.get("attention", 0),
+            memory_score=data.get("memory", 0),
+            assessment_date=datetime.utcnow(),
+        )
+
+        db.session.add(progress)
+        db.session.commit()
+
+        return jsonify({"status": "success", "message": "Progress updated successfully"})
+
+    except Exception as e:
+        print(f"Error updating progress: {e}")
+        return (
+            jsonify({"status": "error", "message": "Failed to update progress"}),
+            500,
+        )
+
 #Gemini chatbot for parents / therapists
 
 @app.route("/api/chat", methods=["POST"])
@@ -689,69 +753,6 @@ def generate_report():
         print("Gemini report error:", e)
         db.session.rollback()
         return jsonify({"error": "Failed to generate report"}), 500
-
-
-@app.route("/insights")
-@login_required
-def insights():
-    """AI insights page"""
-    ai_insights = (
-        AIInsight.query.filter_by(user_id=current_user.id)
-        .order_by(AIInsight.generated_date.desc())
-        .all()
-    )
-    sessions = GameSession.query.filter_by(user_id=current_user.id).all()
-
-    # NOTE: template file is 'insights.html' in your /templates folder
-    return render_template("insights.html", insights=ai_insights, sessions=sessions)
-
-
-@app.route("/admin/clear_insights")
-@login_required
-def clear_insights():
-    AIInsight.query.filter_by(user_id=current_user.id).delete()
-    db.session.commit()
-    flash("Old insights cleared. New insights will be generated on next visit.")
-    return redirect(url_for("insights"))
-
-
-@app.route("/profile")
-@login_required
-def profile():
-    return render_template("profile.html")
-
-
-@app.route("/api/update_progress", methods=["POST"])
-@login_required
-def update_progress():
-    data = request.get_json()
-
-    try:
-        progress = ProgressData(
-            user_id=current_user.id,
-            motor_skills_score=data.get("motor_skills", 0),
-            cognitive_skills_score=data.get("cognitive_skills", 0),
-            hand_eye_coordination=data.get("coordination", 0),
-            reaction_time=data.get("reaction_time", 0),
-            fine_motor_score=data.get("fine_motor", 0),
-            gross_motor_score=data.get("gross_motor", 0),
-            attention_score=data.get("attention", 0),
-            memory_score=data.get("memory", 0),
-            assessment_date=datetime.utcnow(),
-        )
-
-        db.session.add(progress)
-        db.session.commit()
-
-        return jsonify({"status": "success", "message": "Progress updated successfully"})
-
-    except Exception as e:
-        print(f"Error updating progress: {e}")
-        return (
-            jsonify({"status": "error", "message": "Failed to update progress"}),
-            500,
-        )
-
 
 # -----------------------------
 # Misc & Error handlers
