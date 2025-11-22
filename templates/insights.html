@@ -280,6 +280,53 @@
                 </div>
             </div>
             
+             <!-- Narrative Progress Report -->
+            <div class="card mb-4">
+                <div class="card-header bg-transparent">
+                    <h5 class="mb-0">
+                        <i class="fas fa-file-alt text-primary"></i> Narrative Progress Report
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <p class="small text-muted">
+                        Create a gentle, easy-to-read summary of recent NeuroPlay activity.
+                        This report is for information only and does not replace professional evaluation.
+                    </p>
+
+                    <div class="mb-2">
+                        <small class="text-muted d-block mb-1">Report style</small>
+                        <div class="btn-group btn-group-sm w-100" role="group">
+                            <button type="button" class="btn btn-outline-primary active" id="report-parent">
+                                Parent-friendly
+                            </button>
+                            <button type="button" class="btn btn-outline-secondary" id="report-therapist">
+                                Therapist-focused
+                            </button>
+                        </div>
+                    </div>
+
+                    <button id="generate-report-btn" class="btn btn-primary w-100 mb-2">
+                        <i class="fas fa-magic me-1"></i> Generate Report
+                    </button>
+
+                    <div id="report-output" style="
+                        margin-top: 8px;
+                        white-space: pre-wrap;
+                        background: #f9fafb;
+                        border-radius: 10px;
+                        padding: 10px;
+                        font-size: 14px;
+                        max-height: 260px;
+                        overflow-y: auto;
+                    "></div>
+
+                    <small class="text-muted d-block mt-2" style="font-size: 11px;">
+                        You can copy this text into notes or share it with your care team.
+                    </small>
+                </div>
+            </div>
+
+            
             <!-- Risk Assessment -->
             {% if insights %}
             <div class="card mb-4">
@@ -355,6 +402,7 @@
 {% endblock %}
 
 {% block extra_js %}
+{{ super() }}
 <script>
 function refreshAnalysis() {
     // Show loading state
@@ -362,12 +410,12 @@ function refreshAnalysis() {
     const originalContent = btn.innerHTML;
     btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Refreshing...';
     btn.disabled = true;
-    
+
     // Simulate API call (in real implementation, call backend)
     setTimeout(() => {
         btn.innerHTML = originalContent;
         btn.disabled = false;
-        
+
         // Show success message
         const alert = document.createElement('div');
         alert.className = 'alert alert-success alert-dismissible fade show mt-3';
@@ -376,20 +424,17 @@ function refreshAnalysis() {
             <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
         `;
         btn.parentNode.appendChild(alert);
-        
+
         // Auto dismiss after 3 seconds
         setTimeout(() => {
-            if (alert.parentNode) {
-                alert.remove();
-            }
+            if (alert.parentNode) { alert.remove(); }
         }, 3000);
     }, 2000);
 }
 
 function exportInsights() {
     // Create a simple report
-    const reportContent = `
-NeuroPlay AI Insights Report
+    const reportContent = `NeuroPlay AI Insights Report
 Generated: ${new Date().toLocaleDateString()}
 
 Development Trajectory: {{ insights[0].progress_trajectory.title() if insights else 'N/A' }}
@@ -407,8 +452,8 @@ Recommendations:
 {% else %}
 - No recommendations available yet
 {% endif %}
-    `.trim();
-    
+`.trim();
+
     const blob = new Blob([reportContent], { type: 'text/plain' });
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -428,6 +473,65 @@ document.addEventListener('DOMContentLoaded', function() {
             bar.style.transition = 'width 1s ease-in-out';
             bar.style.width = width;
         }, 500);
+    });
+});
+</script>
+
+<script>
+{{!-- Narrative Report generator script --}}
+document.addEventListener("DOMContentLoaded", function () {
+    const btnParent = document.getElementById("report-parent");
+    const btnTherapist = document.getElementById("report-therapist");
+    const generateBtn = document.getElementById("generate-report-btn");
+    const output = document.getElementById("report-output");
+
+    // If the button elements are not present (e.g. no insights), bail out gracefully
+    if (!generateBtn || !output || !btnParent || !btnTherapist) return;
+
+    let audience = "parent";
+
+    function setReportAudience(aud) {
+        audience = aud;
+        if (aud === "parent") {
+            btnParent.classList.add("btn-primary", "active");
+            btnParent.classList.remove("btn-outline-primary");
+            btnTherapist.classList.remove("btn-primary", "active");
+            btnTherapist.classList.add("btn-outline-secondary");
+        } else {
+            btnTherapist.classList.add("btn-primary", "active");
+            btnTherapist.classList.remove("btn-outline-secondary");
+            btnParent.classList.remove("btn-primary", "active");
+            btnParent.classList.add("btn-outline-primary");
+        }
+    }
+
+    btnParent.addEventListener("click", () => setReportAudience("parent"));
+    btnTherapist.addEventListener("click", () => setReportAudience("therapist"));
+
+    generateBtn.addEventListener("click", async function () {
+        generateBtn.disabled = true;
+        output.textContent = "Generating report…";
+
+        try {
+            const res = await fetch("{{ url_for('generate_report') }}", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ audience }),
+            });
+            const data = await res.json();
+            if (data.report) {
+                output.textContent = data.report;
+            } else if (data.error) {
+                output.textContent = "Sorry, I couldn't create the report right now.";
+            } else {
+                output.textContent = "No report received from server.";
+            }
+        } catch (err) {
+            console.error(err);
+            output.textContent = "Connection problem – please try again later.";
+        } finally {
+            generateBtn.disabled = false;
+        }
     });
 });
 </script>
