@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>NeuroPlay – Bubble Pop (Web)</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #f5f5f5;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    #game-container {
+      margin-top: 20px;
+      background: #ffffff;
+      border-radius: 16px;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.08);
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    #gameCanvas {
+      border-radius: 12px;
+      background: radial-gradient(circle at top, #dcfce7, #eff6ff);
+      border: 1px solid #e0e7ff;
+    }
+    #hud {
+      margin-top: 12px;
+      display: flex;
+      gap: 16px;
+      font-size: 14px;
+    }
+    .badge {
+      padding: 4px 10px;
+      border-radius: 999px;
+      background: #e0f2fe;
+      color: #0369a1;
+    }
+    #controls {
+      margin-top: 12px;
+      display: flex;
+      gap: 10px;
+    }
+    button {
+      border-radius: 999px;
+      border: none;
+      padding: 8px 16px;
+      font-size: 14px;
+      cursor: pointer;
+      background: #16a34a;
+      color: white;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    button.secondary {
+      background: #e5e7eb;
+      color: #111827;
+    }
+    button:disabled {
+      opacity: 0.6;
+      cursor: default;
+    }
+    #status {
+      margin-top: 8px;
+      font-size: 13px;
+      color: #4b5563;
+      text-align: center;
+      min-height: 18px;
+    }
+  </style>
+</head>
+<body>
+  <h2 style="margin-top:18px;">Bubble Pop – Web Version</h2>
+  <p style="font-size:14px;margin:4px 16px;text-align:center;max-width:640px;">
+    Click or tap the bubbles as they appear. Bubbles on the left count as LEFT-hand,
+    bubbles on the right as RIGHT-hand for coordination analysis.
+  </p>
+
+  <div id="game-container">
+    <canvas id="gameCanvas" width="800" height="500"></canvas>
+
+    <div id="hud">
+      <span class="badge">Level: <span id="level">1</span></span>
+      <span class="badge">Score: <span id="score">0</span></span>
+      <span class="badge">Popped: <span id="popped">0</span></span>
+      <span class="badge">Missed: <span id="missed">0</span></span>
+    </div>
+
+    <div id="controls">
+      <button id="startBtn">▶ Start</button>
+      <button id="endBtn" class="secondary" disabled>⏹ End &amp; Save Session</button>
+    </div>
+
+    <div id="status"></div>
+  </div>
+
+  <script>
+    const RECORD_SESSION_URL = "{{ record_session_url }}";
+    const USER_ID = {{ user_id | int }};
+
+    const canvas = document.getElementById("gameCanvas");
+    const ctx = canvas.getContext("2d");
+    const hudLevel = document.getElementById("level");
+    const hudScore = document.getElementById("score");
+    const hudPopped = document.getElementById("popped");
+    const hudMissed = document.getElementById("missed");
+    const startBtn = document.getElementById("startBtn");
+    const endBtn = document.getElementById("endBtn");
+    const statusEl = document.getElementById("status");
+
+    // ---- Difficulty ramp (approximate port of Python logic) ----
+    function difficultyForLevel(level) {
+      level = Math.max(1, level);
+      const spawnInterval = Math.max(700, 2000 - (level - 1) * 120); // ms
+      const maxBubbles = Math.min(2 + Math.floor(level / 2), 8);
+      const lifetime = Math.max(2500, 5500 - (level - 1) * 180); // ms
+      const minRadius = Math.max(25, 45 - (level - 1));
+      const maxRadius = minRadius + 20;
+      return {spawnInterval, maxBubbles, lifetime, minRadius, maxRadius};
+    }
+
+    class Bubble {
+      constructor(params) {
+        this.requiredHand = Math.random() < 0.5 ? "Left" : "Right";
+        const margin = 60;
+        if (this.requiredHand === "Left") {
+          this.x = margin + Math.random() * (canvas.width*0.45 - margin);
+        } else {
+          this.x = canvas.width*0.55 + Math.random() * (canvas.width*0.45 - margin);
+        }
+        this.y = 80 + Math.random() * (canvas.height - 160);
+        this.radius = params.minRadius + Math.random()*(params.maxRadius - params.minRadius);
+        this.createdAt = performance.now();
+        this.lifetime = params.lifetime;
+        this.popped = false;
+      }
+
+      draw() {
+        if (this.popped) return;
+        const colors = ["#60a5fa","#4ade80","#facc15","#a855f7","#fb7185","#4ade80"];
+        const color = colors[Math.floor(Math.random()*colors.length)];
+        const grad = ctx.createRadialGradient(
+          this.x - this.radius*0.4, this.y - this.radius*0.4, this.radius*0.2,
+          this.x, this.y, this.radius
+        );
+        grad.addColorStop(0, "rgba(255,255,255,0.95)");
+        grad.addColorStop(1, color);
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.radius, 0, Math.PI*2);
+        ctx.fill();
+
+        // L/R text
+        ctx.fillStyle = "#111827";
+        ctx.font = "bold 14px system-ui";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(this.requiredHand[0], this.x, this.y);
+      }
+
+      isExpired(now) {
+        return now - this.createdAt > this.lifetime;
+      }
+
+      containsPoint(x,y) {
+        const dx = x - this.x;
+        const dy = y - this.y;
+        return Math.sqrt(dx*dx + dy*dy) <= this.radius;
+      }
+    }
+
+    // ---- Game state ----
+    let running = false;
+    let level = 1;
+    let bubbles = [];
+    let lastSpawnTime = 0;
+    let levelParams = difficultyForLevel(level);
+
+    let score = 0;
+    let poppedCount = 0;
+    let missedCount = 0;
+    let leftHandPops = 0;
+    let rightHandPops = 0;
+    let reactionTimes = [];
+    let handCoordination = {
+      left_success: 0,
+      right_success: 0,
+      left_miss: 0,
+      right_miss: 0
+    };
+
+    let sessionStartTime = 0;
+
+    function resetSession() {
+      running = false;
+      level = 1;
+      bubbles = [];
+      lastSpawnTime = 0;
+      levelParams = difficultyForLevel(level);
+      score = 0;
+      poppedCount = 0;
+      missedCount = 0;
+      leftHandPops = 0;
+      rightHandPops = 0;
+      reactionTimes = [];
+      handCoordination = {
+        left_success: 0,
+        right_success: 0,
+        left_miss: 0,
+        right_miss: 0
+      };
+      hudLevel.textContent = level;
+      hudScore.textContent = score;
+      hudPopped.textContent = poppedCount;
+      hudMissed.textContent = missedCount;
+      statusEl.textContent = "Press Start to begin.";
+      drawIdle();
+    }
+
+    function startGame() {
+      resetSession();
+      running = true;
+      sessionStartTime = performance.now();
+      startBtn.disabled = true;
+      endBtn.disabled = false;
+      statusEl.textContent = "Tap the bubbles as quickly as you can!";
+      requestAnimationFrame(gameLoop);
+    }
+
+    function endGame() {
+      running = false;
+      startBtn.disabled = false;
+      endBtn.disabled = true;
+      statusEl.textContent = "Sending session data...";
+      sendSessionData();
+    }
+
+    function drawIdle() {
+      ctx.clearRect(0,0,canvas.width,canvas.height);
+      ctx.fillStyle = "#e0f2fe";
+      ctx.fillRect(0,0,canvas.width,canvas.height);
+      ctx.fillStyle = "#111827";
+      ctx.font = "24px system-ui";
+      ctx.textAlign = "center";
+      ctx.fillText("Bubble Pop", canvas.width/2, canvas.height/2 - 10);
+      ctx.font = "16px system-ui";
+      ctx.fillText("Press Start, then click the bubbles!", canvas.width/2, canvas.height/2 + 20);
+    }
+
+    function gameLoop(now) {
+      if (!running) return;
+      ctx.clearRect(0,0,canvas.width,canvas.height);
+      const grad = ctx.createLinearGradient(0,0,canvas.width,canvas.height);
+      grad.addColorStop(0,"#dcfce7");
+      grad.addColorStop(1,"#eff6ff");
+      ctx.fillStyle = grad;
+      ctx.fillRect(0,0,canvas.width,canvas.height);
+
+      // spawn
+      if (!lastSpawnTime || now - lastSpawnTime > levelParams.spawnInterval) {
+        if (bubbles.length < levelParams.maxBubbles) {
+          bubbles.push(new Bubble(levelParams));
+          lastSpawnTime = now;
+        }
+      }
+
+      // update + draw
+      for (const b of bubbles) {
+        b.draw();
+      }
+
+      // expire
+      bubbles = bubbles.filter(b => {
+        if (b.popped) return false;
+        if (b.isExpired(now)) {
+          missedCount += 1;
+          if (b.requiredHand === "Left") handCoordination.left_miss += 1;
+          else handCoordination.right_miss += 1;
+          hudMissed.textContent = missedCount;
+          return false;
+        }
+        return true;
+      });
+
+      // simple level increase over time
+      const elapsedSec = (now - sessionStartTime) / 1000;
+      const newLevel = 1 + Math.floor(elapsedSec / 30); // every 30s
+      if (newLevel !== level) {
+        level = newLevel;
+        levelParams = difficultyForLevel(level);
+        hudLevel.textContent = level;
+      }
+
+      requestAnimationFrame(gameLoop);
+    }
+
+    function handlePointerDown(evt) {
+      if (!running) return;
+      const rect = canvas.getBoundingClientRect();
+      const x = (evt.clientX - rect.left) * (canvas.width / rect.width);
+      const y = (evt.clientY - rect.top) * (canvas.height / rect.height);
+      const now = performance.now();
+
+      let hit = null;
+      for (const b of bubbles) {
+        if (!b.popped && b.containsPoint(x,y)) {
+          hit = b;
+          break;
+        }
+      }
+
+      if (hit) {
+        hit.popped = true;
+        poppedCount += 1;
+        hudPopped.textContent = poppedCount;
+        const rt = (now - hit.createdAt) / 1000;
+        reactionTimes.push(rt);
+
+        if (hit.requiredHand === "Left") {
+          leftHandPops += 1;
+          handCoordination.left_success += 1;
+        } else {
+          rightHandPops += 1;
+          handCoordination.right_success += 1;
+        }
+
+        score += Math.max(5, Math.round(20 - rt * 5));
+        hudScore.textContent = score;
+      }
+    }
+
+    canvas.addEventListener("pointerdown", handlePointerDown);
+
+    async function sendSessionData() {
+      const sessionDuration = (performance.now() - sessionStartTime) / 1000;
+      const totalAttempts = poppedCount + missedCount;
+      const accuracy = totalAttempts ? (poppedCount / totalAttempts) * 100 : 0;
+
+      const payload = {
+        game_name: "bubble_pop",
+        user_id: USER_ID,
+        score: score,
+        level: level,
+        session_duration: sessionDuration,
+        total_attempts: totalAttempts,
+        successful_attempts: poppedCount,
+        left_hand_count: leftHandPops,
+        right_hand_count: rightHandPops,
+        reaction_times: reactionTimes,
+        hand_coordination: handCoordination,
+        squeeze_count: 0,
+        accuracy_percentage: accuracy,
+        timestamp: new Date().toISOString()
+      };
+
+      try {
+        const res = await fetch(RECORD_SESSION_URL, {
+          method: "POST",
+          headers: {"Content-Type":"application/json"},
+          body: JSON.stringify(payload)
+        });
+        if (res.ok) {
+          const data = await res.json();
+          statusEl.textContent = "Session saved ✔ You can view insights on your dashboard.";
+        } else {
+          statusEl.textContent = "Could not save session (server error).";
+        }
+      } catch (err) {
+        console.error(err);
+        statusEl.textContent = "Could not reach server – session not saved.";
+      }
+    }
+
+    startBtn.addEventListener("click", startGame);
+    endBtn.addEventListener("click", () => {
+      if (running) endGame();
+    });
+
+    resetSession();
+  </script>
+</body>
+</html>
