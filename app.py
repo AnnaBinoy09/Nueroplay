@@ -35,7 +35,8 @@ import requests
 
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta/models"
+GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent
+"
 
 if not GEMINI_API_KEY:
     print("⚠ GEMINI_API_KEY is not set – Gemini chatbot/report will be disabled.")
@@ -44,7 +45,7 @@ if not GEMINI_API_KEY:
 # Gemini helpers
 # -----------------------------
 
-def call_gemini(prompt: str, model: str = "gemini-1.5-flash-latest", timeout: float = 8.0) -> str:
+def call_gemini(prompt: str, model: str = "gemini-pro", timeout: float = 8.0) -> str:
     """
     Call the Gemini API over simple HTTPS (REST) instead of the Python SDK.
     Returns the text of the first candidate, or raises an error.
@@ -730,7 +731,7 @@ def chat():
     
   
     try:
-        reply_text = call_gemini(prompt, model="gemini-1.5-flash-latest", timeout=8.0)
+        reply_text = call_gemini(prompt, model="gemini-pro", timeout=8.0)
         if not reply_text:
             raise RuntimeError("Empty response from Gemini")
         return jsonify({"reply": reply_text})
@@ -777,7 +778,7 @@ def generate_report():
     )
 
     try:
-        report_text = call_gemini(prompt, model="gemini-1.5-flash-latest", timeout=10.0)
+        report_text = call_gemini(prompt, model="gemini-pro", timeout=10.0)
         if not report_text:
             raise RuntimeError("Empty response from Gemini")
             
