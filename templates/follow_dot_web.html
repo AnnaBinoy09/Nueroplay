@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>NeuroPlay – Follow the Dot (Web)</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #f5f5f5;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    #game-container {
+      margin-top: 20px;
+      background: #ffffff;
+      border-radius: 16px;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.08);
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    #gameCanvas {
+      border-radius: 12px;
+      background: linear-gradient(135deg, #eff6ff, #fdf2ff);
+      border: 1px solid #e0e7ff;
+    }
+    #hud {
+      margin-top: 12px;
+      display: flex;
+      gap: 16px;
+      font-size: 14px;
+    }
+    .badge {
+      padding: 4px 10px;
+      border-radius: 999px;
+      background: #e0f2fe;
+      color: #0369a1;
+    }
+    #controls {
+      margin-top: 12px;
+      display: flex;
+      gap: 10px;
+    }
+    button {
+      border-radius: 999px;
+      border: none;
+      padding: 8px 16px;
+      font-size: 14px;
+      cursor: pointer;
+      background: #2563eb;
+      color: white;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    button.secondary {
+      background: #e5e7eb;
+      color: #111827;
+    }
+    button:disabled {
+      opacity: 0.6;
+      cursor: default;
+    }
+    #status {
+      margin-top: 8px;
+      font-size: 13px;
+      color: #4b5563;
+      text-align: center;
+      min-height: 18px;
+    }
+  </style>
+</head>
+<body>
+  <h2 style="margin-top:18px;">Follow the Dot – Web Version</h2>
+  <p style="font-size:14px;margin:4px 16px;text-align:center;max-width:640px;">
+    Move your mouse or finger to follow each glowing dot in order. Smooth, steady movement
+    is more important than speed. When you’re done, we’ll send the results to your NeuroPlay
+    dashboard.
+  </p>
+
+  <div id="game-container">
+    <canvas id="gameCanvas" width="800" height="500"></canvas>
+
+    <div id="hud">
+      <span class="badge">Level: <span id="level">1</span></span>
+      <span class="badge">Score: <span id="score">0</span></span>
+      <span class="badge">Patterns: <span id="patterns">0</span></span>
+    </div>
+
+    <div id="controls">
+      <button id="startBtn">▶ Start</button>
+      <button id="endBtn" class="secondary" disabled>⏹ End &amp; Save Session</button>
+    </div>
+
+    <div id="status"></div>
+  </div>
+
+  <script>
+    // Values injected from Flask
+    const RECORD_SESSION_URL = "{{ record_session_url }}";
+    const USER_ID = {{ user_id | int }};
+
+    const canvas = document.getElementById("gameCanvas");
+    const ctx = canvas.getContext("2d");
+
+    const hudLevel = document.getElementById("level");
+    const hudScore = document.getElementById("score");
+    const hudPatterns = document.getElementById("patterns");
+    const statusEl = document.getElementById("status");
+    const startBtn = document.getElementById("startBtn");
+    const endBtn = document.getElementById("endBtn");
+
+    // ---------- Game config ----------
+    const patternsDefs = {
+      line_horizontal: [
+        [0.2, 0.5],[0.3,0.5],[0.4,0.5],[0.5,0.5],[0.6,0.5],[0.7,0.5]
+      ],
+      line_vertical: [
+        [0.5,0.2],[0.5,0.3],[0.5,0.4],[0.5,0.5],[0.5,0.6],[0.5,0.7]
+      ],
+      square_small: [
+        [0.35,0.35],[0.65,0.35],[0.65,0.65],[0.35,0.65]
+      ],
+      square_large: [
+        [0.25,0.25],[0.75,0.25],[0.75,0.75],[0.25,0.75]
+      ],
+      zigzag: [
+        [0.25,0.35],[0.35,0.55],[0.45,0.35],[0.55,0.55],[0.65,0.35],[0.75,0.55]
+      ]
+    };
+
+    function patternForLevel(level) {
+      let name;
+      if (level <= 2) name = "line_horizontal";
+      else if (level <= 4) name = "line_vertical";
+      else if (level <= 6) name = "square_small";
+      else if (level <= 8) name = "square_large";
+      else name = "zigzag";
+
+      const hitRadius = Math.max(20, 45 - (level - 1) * 2);
+      return { name, hitRadius };
+    }
+
+    function buildPattern(name) {
+      const pts = patternsDefs[name];
+      return pts.map(([nx, ny]) => ({
+        x: nx * canvas.width,
+        y: ny * canvas.height
+      }));
+    }
+
+    // ---------- Game state ----------
+    let running = false;
+    let level = 1;
+    let score = 0;
+    let patternsCompleted = 0;
+
+    let currentPattern = [];
+    let currentPointIndex = 0;
+    let hitRadius = 40;
+
+    let handPos = null;
+    let lastHandPos = null;
+    let handPath = [];  // [{x,y,t}]
+    let patternStartTime = 0;
+    let sessionStartTime = 0;
+
+    let totalTries = 0;
+    let rightTries = 0;
+    let wrongTries = 0;
+
+    const completionTimes = [];
+    const smoothnessScores = [];
+    const precisionScores = [];
+
+    function resetSession() {
+      running = false;
+      level = 1;
+      score = 0;
+      patternsCompleted = 0;
+      totalTries = 0;
+      rightTries = 0;
+      wrongTries = 0;
+      completionTimes.length = 0;
+      smoothnessScores.length = 0;
+      precisionScores.length = 0;
+      handPath.length = 0;
+
+      hudLevel.textContent = level;
+      hudScore.textContent = score;
+      hudPatterns.textContent = patternsCompleted;
+      statusEl.textContent = "Press Start to begin.";
+      drawIdleScreen();
+    }
+
+    function startGame() {
+      resetSession();
+      running = true;
+      sessionStartTime = performance.now();
+      startBtn.disabled = true;
+      endBtn.disabled = false;
+      statusEl.textContent = "Follow each glowing dot in order.";
+      startNewPattern();
+    }
+
+    function endGame() {
+      running = false;
+      startBtn.disabled = false;
+      endBtn.disabled = true;
+      statusEl.textContent = "Sending session data...";
+      sendSessionData();
+    }
+
+    function startNewPattern() {
+      const cfg = patternForLevel(level);
+      hitRadius = cfg.hitRadius;
+      currentPattern = buildPattern(cfg.name);
+      currentPointIndex = 0;
+      patternStartTime = performance.now();
+      handPath.length = 0;
+      drawFrame();
+    }
+
+    // ---------- Metrics ----------
+    function computeSmoothness(path) {
+      if (path.length < 3) return 100;
+      const v = [];
+      for (let i = 1; i < path.length; i++) {
+        const dx = path[i].x - path[i-1].x;
+        const dy = path[i].y - path[i-1].y;
+        const dt = (path[i].t - path[i-1].t) || 1;
+        const vel = Math.sqrt(dx*dx + dy*dy) / dt;
+        v.push(vel);
+      }
+      if (!v.length) return 100;
+      const avg = v.reduce((a,b)=>a+b,0)/v.length;
+      const variance = v.reduce((a,b)=>a+(b-avg)**2,0)/v.length;
+      return Math.max(0, Math.min(100, 100 - variance * 2000));
+    }
+
+    function computePrecision(path, target) {
+      if (!path.length) return 0;
+      let minDist = Infinity;
+      for (const p of path) {
+        const dx = p.x - target.x;
+        const dy = p.y - target.y;
+        const d = Math.sqrt(dx*dx + dy*dy);
+        if (d < minDist) minDist = d;
+      }
+      const tol = 60;
+      return Math.max(0, Math.min(100, 100 - (minDist / tol) * 100));
+    }
+
+    // ---------- Canvas drawing ----------
+    function drawIdleScreen() {
+      ctx.clearRect(0,0,canvas.width,canvas.height);
+      ctx.fillStyle = "#e5e7eb";
+      ctx.fillRect(0,0,canvas.width,canvas.height);
+
+      ctx.fillStyle = "#374151";
+      ctx.font = "24px system-ui";
+      ctx.textAlign = "center";
+      ctx.fillText("Follow the Dot", canvas.width/2, canvas.height/2 - 10);
+      ctx.font = "16px system-ui";
+      ctx.fillText("Press Start, then move your mouse or finger to follow the dots.", canvas.width/2, canvas.height/2 + 20);
+    }
+
+    function drawFrame() {
+      ctx.clearRect(0,0,canvas.width,canvas.height);
+      // background
+      const grad = ctx.createLinearGradient(0,0,canvas.width,canvas.height);
+      grad.addColorStop(0,"#eff6ff");
+      grad.addColorStop(1,"#fae8ff");
+      ctx.fillStyle = grad;
+      ctx.fillRect(0,0,canvas.width,canvas.height);
+
+      // draw path lines
+      ctx.strokeStyle = "#d1d5db";
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      currentPattern.forEach((p, idx) => {
+        if (idx === 0) ctx.moveTo(p.x, p.y);
+        else ctx.lineTo(p.x, p.y);
+      });
+      ctx.stroke();
+
+      // draw dots
+      currentPattern.forEach((p, idx) => {
+        const isCurrent = idx === currentPointIndex;
+        const baseR = isCurrent ? hitRadius : hitRadius * 0.6;
+        ctx.beginPath();
+        ctx.fillStyle = isCurrent ? "#22c55e" : "#60a5fa";
+        ctx.arc(p.x, p.y, baseR, 0, Math.PI*2);
+        ctx.fill();
+
+        // inner dot
+        ctx.beginPath();
+        ctx.fillStyle = "white";
+        ctx.arc(p.x, p.y, baseR*0.4, 0, Math.PI*2);
+        ctx.fill();
+      });
+
+      // hand cursor
+      if (handPos) {
+        ctx.beginPath();
+        ctx.fillStyle = "#f97316";
+        ctx.arc(handPos.x, handPos.y, 10, 0, Math.PI*2);
+        ctx.fill();
+      }
+
+      requestAnimationFrame(() => {
+        if (running) drawFrame();
+      });
+    }
+
+    // ---------- Input handling ----------
+    function handlePointerMove(evt) {
+      const rect = canvas.getBoundingClientRect();
+      const x = (evt.clientX - rect.left) * (canvas.width / rect.width);
+      const y = (evt.clientY - rect.top) * (canvas.height / rect.height);
+      handPos = { x, y };
+
+      const now = performance.now();
+      handPath.push({ x, y, t: now });
+
+      if (!running) return;
+      const target = currentPattern[currentPointIndex];
+      const dx = x - target.x;
+      const dy = y - target.y;
+      const dist = Math.sqrt(dx*dx + dy*dy);
+
+      if (dist <= hitRadius * 0.7) {
+        // reached point
+        totalTries += 1;
+        rightTries += 1;
+
+        const elapsed = (now - patternStartTime) / 1000;
+        completionTimes.push(elapsed);
+        const smooth = computeSmoothness(handPath);
+        const precision = computePrecision(handPath, target);
+        smoothnessScores.push(smooth);
+        precisionScores.push(precision);
+
+        score += Math.round(10 + smooth * 0.2 + precision * 0.2);
+        hudScore.textContent = score;
+
+        currentPointIndex += 1;
+        patternStartTime = now;
+        handPath.length = 0;
+
+        if (currentPointIndex >= currentPattern.length) {
+          // pattern complete
+          patternsCompleted += 1;
+          hudPatterns.textContent = patternsCompleted;
+          level += 1;
+          hudLevel.textContent = level;
+          startNewPattern();
+        }
+      }
+    }
+
+    canvas.addEventListener("pointermove", handlePointerMove);
+
+    // ---------- Session sending ----------
+    async function sendSessionData() {
+      const sessionDuration = (performance.now() - sessionStartTime) / 1000;
+      const payload = {
+        game_name: "follow_dot",
+        user_id: USER_ID,
+        score: score,
+        level: level,
+        session_duration: sessionDuration,
+        total_tries: totalTries,
+        right_tries: rightTries,
+        wrong_tries: wrongTries,
+        left_hand_count: 0,
+        right_hand_count: 0,
+        patterns_completed: patternsCompleted,
+        movement_analysis: {
+          smoothness_scores: smoothnessScores,
+          precision_scores: precisionScores,
+          completion_times: completionTimes,
+        },
+        timestamp: new Date().toISOString(),
+      };
+
+      try {
+        const res = await fetch(RECORD_SESSION_URL, {
+          method: "POST",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify(payload),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          statusEl.textContent = "Session saved ✔ You can view insights on your dashboard.";
+        } else {
+          statusEl.textContent = "Could not save session (server error).";
+        }
+      } catch (err) {
+        console.error(err);
+        statusEl.textContent = "Could not reach server – session not saved.";
+      }
+    }
+
+    // ---------- Buttons ----------
+    startBtn.addEventListener("click", () => {
+      startGame();
+    });
+
+    endBtn.addEventListener("click", () => {
+      if (running) {
+        endGame();
+      }
+    });
+
+    // initial screen
+    resetSession();
+  </script>
+</body>
+</html>
