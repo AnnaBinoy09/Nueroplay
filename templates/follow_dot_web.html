@@ -3,56 +3,137 @@
 <head>
   <meta charset="UTF-8" />
   <title>NeuroPlay – Follow the Dot (Web)</title>
+
   <!-- MediaPipe JS libs -->
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
-  
+
   <style>
+    :root {
+      --bg: #f5f5f7;
+      --card-bg: #ffffff;
+      --accent: #60a5fa;
+      --accent-soft: #e0f2fe;
+      --success-soft: #dcfce7;
+      --text-main: #111827;
+      --text-soft: #4b5563;
+      --radius-lg: 18px;
+      --radius-md: 12px;
+      --shadow-soft: 0 12px 30px rgba(15, 23, 42, 0.12);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
     body {
       margin: 0;
+      min-height: 100vh;
       font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      background: #f5f5f5;
+      background: radial-gradient(circle at top, #eff6ff, #faf5ff 45%, #f5f5f7);
       display: flex;
       flex-direction: column;
       align-items: center;
+      color: var(--text-main);
     }
-    #game-container {
-      margin-top: 20px;
-      background: #ffffff;
-      border-radius: 16px;
-      box-shadow: 0 10px 25px rgba(0,0,0,0.08);
-      padding: 16px;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
+
+    h1, h2, h3 {
+      margin: 0;
+      font-weight: 600;
     }
-    #gameCanvas {
-      border-radius: 12px;
-      background: linear-gradient(135deg, #eff6ff, #fdf2ff);
-      border: 1px solid #e0e7ff;
+
+    .page-header {
+      margin-top: 18px;
+      text-align: center;
+      padding: 0 16px;
     }
-    #hud {
-      margin-top: 12px;
-      display: flex;
-      gap: 16px;
+
+    .page-header h2 {
+      font-size: 22px;
+      margin-bottom: 4px;
+    }
+
+    .page-header p {
+      margin: 0;
       font-size: 14px;
+      color: var(--text-soft);
+      max-width: 640px;
+      margin-inline: auto;
     }
-    .badge {
-      padding: 4px 10px;
-      border-radius: 999px;
-      background: #e0f2fe;
-      color: #0369a1;
-    }
-    #controls {
-      margin-top: 12px;
+
+    #game-container {
+      margin: 20px 16px 32px;
+      background: var(--card-bg);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow-soft);
+      padding: 16px 16px 12px;
       display: flex;
+      flex-direction: column;
+      align-items: stretch;
+      max-width: 960px;
+      width: 100%;
+    }
+
+    #game-top {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    #gameCanvas {
+      border-radius: var(--radius-md);
+      background: radial-gradient(circle at top left, #eff6ff, #fdf2ff);
+      border: 1px solid #e5e7eb;
+      touch-action: none;
+      width: 100%;
+      height: auto;
+      display: block;
+    }
+
+    @media (min-width: 880px) {
+      #gameCanvas {
+        max-height: 520px;
+      }
+    }
+
+    #hud {
+      margin-top: 8px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      font-size: 13px;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .badge {
+      padding: 4px 12px;
+      border-radius: 999px;
+      background: var(--accent-soft);
+      color: #0369a1;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .badge-label {
+      font-weight: 500;
+    }
+
+    #controls-row {
+      margin-top: 8px;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: center;
       gap: 10px;
     }
+
     button {
       border-radius: 999px;
       border: none;
-      padding: 8px 16px;
+      padding: 8px 18px;
       font-size: 14px;
       cursor: pointer;
       background: #2563eb;
@@ -60,47 +141,137 @@
       display: inline-flex;
       align-items: center;
       gap: 6px;
+      transition: transform 0.08s ease, box-shadow 0.08s ease, background 0.12s;
+      box-shadow: 0 6px 18px rgba(37, 99, 235, 0.25);
     }
+
     button.secondary {
       background: #e5e7eb;
       color: #111827;
+      box-shadow: none;
     }
+
     button:disabled {
-      opacity: 0.6;
+      opacity: 0.55;
       cursor: default;
+      box-shadow: none;
+      transform: none;
     }
+
+    button:not(:disabled):active {
+      transform: translateY(1px);
+      box-shadow: 0 3px 8px rgba(15, 23, 42, 0.15);
+    }
+
     #status {
       margin-top: 8px;
       font-size: 13px;
-      color: #4b5563;
+      color: var(--text-soft);
       text-align: center;
       min-height: 18px;
+    }
+
+    #camera-indicator {
+      margin-top: 2px;
+      font-size: 12px;
+      color: #6b7280;
+      text-align: center;
+      min-height: 16px;
+    }
+
+    #camera-row {
+      margin-top: 10px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    #camera-wrapper {
+      background: #f3f4f6;
+      border-radius: var(--radius-md);
+      padding: 6px;
+      border: 1px solid #e5e7eb;
+      display: inline-flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    #camera-label {
+      font-size: 11px;
+      color: #6b7280;
+      margin-bottom: 4px;
+    }
+
+    video {
+      display: block;
+      width: 260px;
+      max-width: 100%;
+      height: auto;
+      border-radius: 10px;
+      background: #111827;
+    }
+
+    @media (max-width: 640px) {
+      #game-container {
+        margin-inline: 10px;
+        padding-inline: 12px;
+      }
+      #camera-wrapper {
+        width: 100%;
+      }
+      video {
+        width: 100%;
+      }
     }
   </style>
 </head>
 <body>
-  <h2 style="margin-top:18px;">Follow the Dot – Web Version</h2>
-  <p style="font-size:14px;margin:4px 16px;text-align:center;max-width:640px;">
-    Move your mouse or finger to follow each glowing dot in order. Smooth, steady movement
-    is more important than speed. When you’re done, we’ll send the results to your NeuroPlay
-    dashboard.
-  </p>
+  <div class="page-header">
+    <h2>Follow the Dot</h2>
+    <p>
+      Gently move your index finger in front of the camera and follow each glowing dot.
+      Take your time – smooth, steady movement is what matters most.
+      You can also use the mouse or touch as a backup.
+    </p>
+  </div>
 
   <div id="game-container">
-    <canvas id="gameCanvas" width="800" height="500"></canvas>
+    <div id="game-top">
+      <canvas id="gameCanvas" width="900" height="520"></canvas>
 
-    <div id="hud">
-      <span class="badge">Level: <span id="level">1</span></span>
-      <span class="badge">Score: <span id="score">0</span></span>
-      <span class="badge">Patterns: <span id="patterns">0</span></span>
+      <div id="hud">
+        <span class="badge">
+          <span class="badge-label">Level</span>
+          <span id="level">1</span>
+        </span>
+        <span class="badge">
+          <span class="badge-label">Score</span>
+          <span id="score">0</span>
+        </span>
+        <span class="badge">
+          <span class="badge-label">Patterns</span>
+          <span id="patterns">0</span>
+        </span>
+      </div>
+
+      <div id="controls-row">
+        <button id="startBtn">▶ Start Session</button>
+        <button id="endBtn" class="secondary" disabled>⏹ End &amp; Save Session</button>
+      </div>
+
+      <div id="status"></div>
+      <div id="camera-indicator"></div>
     </div>
 
-    <div id="controls">
-      <button id="startBtn">▶ Start</button>
-      <button id="endBtn" class="secondary" disabled>⏹ End &amp; Save Session</button>
+    <div id="camera-row">
+      <div id="camera-wrapper">
+        <div id="camera-label">Hand camera preview</div>
+        <!-- Webcam video used as input for MediaPipe -->
+        <video id="inputVideo" playsinline muted></video>
+      </div>
     </div>
-
-    <div id="status"></div>
   </div>
 
   <script>
@@ -115,10 +286,14 @@
     const hudScore = document.getElementById("score");
     const hudPatterns = document.getElementById("patterns");
     const statusEl = document.getElementById("status");
+    const cameraIndicator = document.getElementById("camera-indicator");
     const startBtn = document.getElementById("startBtn");
     const endBtn = document.getElementById("endBtn");
+    const videoElement = document.getElementById("inputVideo");
 
-    // ---------- Game config ----------
+    // -------------------------------------
+    // Game pattern configuration
+    // -------------------------------------
     const patternsDefs = {
       line_horizontal: [
         [0.2, 0.5],[0.3,0.5],[0.4,0.5],[0.5,0.5],[0.6,0.5],[0.7,0.5]
@@ -145,7 +320,7 @@
       else if (level <= 8) name = "square_large";
       else name = "zigzag";
 
-      const hitRadius = Math.max(20, 45 - (level - 1) * 2);
+      const hitRadius = Math.max(24, 52 - (level - 1) * 2);
       return { name, hitRadius };
     }
 
@@ -157,7 +332,9 @@
       }));
     }
 
-    // ---------- Game state ----------
+    // -------------------------------------
+    // Game state
+    // -------------------------------------
     let running = false;
     let level = 1;
     let score = 0;
@@ -165,23 +342,23 @@
 
     let currentPattern = [];
     let currentPointIndex = 0;
-    let hitRadius = 40;
+    let hitRadius = 44;
 
     let handPos = null;
     let lastHandPos = null;
-    let handPath = [];  // [{x,y,t}]
+    let handPath = [];  // {x,y,t}
     let patternStartTime = 0;
     let sessionStartTime = 0;
 
     let totalTries = 0;
     let rightTries = 0;
-    let wrongTries = 0;
+    let wrongTries = 0; // kept for compatibility
 
     const completionTimes = [];
     const smoothnessScores = [];
     const precisionScores = [];
 
-    function resetSession() {
+    function resetSessionState() {
       running = false;
       level = 1;
       score = 0;
@@ -193,29 +370,32 @@
       smoothnessScores.length = 0;
       precisionScores.length = 0;
       handPath.length = 0;
+      handPos = null;
+      lastHandPos = null;
 
       hudLevel.textContent = level;
       hudScore.textContent = score;
       hudPatterns.textContent = patternsCompleted;
-      statusEl.textContent = "Press Start to begin.";
-      drawIdleScreen();
+      statusEl.textContent = "Press Start, allow camera access and gently follow each dot with your index finger.";
+      drawIdle();
     }
 
     function startGame() {
-      resetSession();
+      resetSessionState();
       running = true;
       sessionStartTime = performance.now();
       startBtn.disabled = true;
       endBtn.disabled = false;
-      statusEl.textContent = "Follow each glowing dot in order.";
+      statusEl.textContent = "Tracking… gently move your index fingertip to each glowing dot.";
       startNewPattern();
+      requestAnimationFrame(drawFrame);
     }
 
     function endGame() {
       running = false;
       startBtn.disabled = false;
       endBtn.disabled = true;
-      statusEl.textContent = "Sending session data...";
+      statusEl.textContent = "Saving session…";
       sendSessionData();
     }
 
@@ -226,10 +406,11 @@
       currentPointIndex = 0;
       patternStartTime = performance.now();
       handPath.length = 0;
-      drawFrame();
     }
 
-    // ---------- Metrics ----------
+    // -------------------------------------
+    // Movement quality metrics
+    // -------------------------------------
     function computeSmoothness(path) {
       if (path.length < 3) return 100;
       const v = [];
@@ -243,6 +424,7 @@
       if (!v.length) return 100;
       const avg = v.reduce((a,b)=>a+b,0)/v.length;
       const variance = v.reduce((a,b)=>a+(b-avg)**2,0)/v.length;
+      // gentle scaling
       return Math.max(0, Math.min(100, 100 - variance * 2000));
     }
 
@@ -255,90 +437,36 @@
         const d = Math.sqrt(dx*dx + dy*dy);
         if (d < minDist) minDist = d;
       }
-      const tol = 60;
+      const tol = 70; // little more forgiving
       return Math.max(0, Math.min(100, 100 - (minDist / tol) * 100));
     }
 
-    // ---------- Canvas drawing ----------
-    function drawIdleScreen() {
-      ctx.clearRect(0,0,canvas.width,canvas.height);
-      ctx.fillStyle = "#e5e7eb";
-      ctx.fillRect(0,0,canvas.width,canvas.height);
-
-      ctx.fillStyle = "#374151";
-      ctx.font = "24px system-ui";
-      ctx.textAlign = "center";
-      ctx.fillText("Follow the Dot", canvas.width/2, canvas.height/2 - 10);
-      ctx.font = "16px system-ui";
-      ctx.fillText("Press Start, then move your mouse or finger to follow the dots.", canvas.width/2, canvas.height/2 + 20);
-    }
-
-    function drawFrame() {
-      ctx.clearRect(0,0,canvas.width,canvas.height);
-      // background
-      const grad = ctx.createLinearGradient(0,0,canvas.width,canvas.height);
-      grad.addColorStop(0,"#eff6ff");
-      grad.addColorStop(1,"#fae8ff");
-      ctx.fillStyle = grad;
-      ctx.fillRect(0,0,canvas.width,canvas.height);
-
-      // draw path lines
-      ctx.strokeStyle = "#d1d5db";
-      ctx.lineWidth = 3;
-      ctx.beginPath();
-      currentPattern.forEach((p, idx) => {
-        if (idx === 0) ctx.moveTo(p.x, p.y);
-        else ctx.lineTo(p.x, p.y);
-      });
-      ctx.stroke();
-
-      // draw dots
-      currentPattern.forEach((p, idx) => {
-        const isCurrent = idx === currentPointIndex;
-        const baseR = isCurrent ? hitRadius : hitRadius * 0.6;
-        ctx.beginPath();
-        ctx.fillStyle = isCurrent ? "#22c55e" : "#60a5fa";
-        ctx.arc(p.x, p.y, baseR, 0, Math.PI*2);
-        ctx.fill();
-
-        // inner dot
-        ctx.beginPath();
-        ctx.fillStyle = "white";
-        ctx.arc(p.x, p.y, baseR*0.4, 0, Math.PI*2);
-        ctx.fill();
-      });
-
-      // hand cursor
-      if (handPos) {
-        ctx.beginPath();
-        ctx.fillStyle = "#f97316";
-        ctx.arc(handPos.x, handPos.y, 10, 0, Math.PI*2);
-        ctx.fill();
+    // -------------------------------------
+    // Main input processing (used by camera + mouse)
+    // -------------------------------------
+    function processPoint(x, y, now) {
+      // simple smoothing with previous handPos
+      const alpha = 0.3; // smoothing factor
+      if (lastHandPos) {
+        handPos = {
+          x: lastHandPos.x + alpha * (x - lastHandPos.x),
+          y: lastHandPos.y + alpha * (y - lastHandPos.y)
+        };
+      } else {
+        handPos = { x, y };
       }
+      lastHandPos = handPos;
 
-      requestAnimationFrame(() => {
-        if (running) drawFrame();
-      });
-    }
+      handPath.push({ x: handPos.x, y: handPos.y, t: now });
 
-    // ---------- Input handling ----------
-    function handlePointerMove(evt) {
-      const rect = canvas.getBoundingClientRect();
-      const x = (evt.clientX - rect.left) * (canvas.width / rect.width);
-      const y = (evt.clientY - rect.top) * (canvas.height / rect.height);
-      handPos = { x, y };
+      if (!running || !currentPattern.length) return;
 
-      const now = performance.now();
-      handPath.push({ x, y, t: now });
-
-      if (!running) return;
       const target = currentPattern[currentPointIndex];
-      const dx = x - target.x;
-      const dy = y - target.y;
+      const dx = handPos.x - target.x;
+      const dy = handPos.y - target.y;
       const dist = Math.sqrt(dx*dx + dy*dy);
 
       if (dist <= hitRadius * 0.7) {
-        // reached point
         totalTries += 1;
         rightTries += 1;
 
@@ -349,7 +477,7 @@
         smoothnessScores.push(smooth);
         precisionScores.push(precision);
 
-        score += Math.round(10 + smooth * 0.2 + precision * 0.2);
+        score += Math.round(10 + smooth * 0.25 + precision * 0.25);
         hudScore.textContent = score;
 
         currentPointIndex += 1;
@@ -357,7 +485,6 @@
         handPath.length = 0;
 
         if (currentPointIndex >= currentPattern.length) {
-          // pattern complete
           patternsCompleted += 1;
           hudPatterns.textContent = patternsCompleted;
           level += 1;
@@ -367,9 +494,186 @@
       }
     }
 
-    canvas.addEventListener("pointermove", handlePointerMove);
+    // -------------------------------------
+    // Drawing
+    // -------------------------------------
+    function drawIdle() {
+      ctx.clearRect(0,0,canvas.width,canvas.height);
+      const grad = ctx.createLinearGradient(0,0,canvas.width,canvas.height);
+      grad.addColorStop(0,"#eff6ff");
+      grad.addColorStop(1,"#fae8ff");
+      ctx.fillStyle = grad;
+      ctx.fillRect(0,0,canvas.width,canvas.height);
 
-    // ---------- Session sending ----------
+      ctx.fillStyle = "#374151";
+      ctx.font = "24px system-ui";
+      ctx.textAlign = "center";
+      ctx.fillText("Follow the Dot", canvas.width/2, canvas.height/2 - 10);
+
+      ctx.fillStyle = "#4b5563";
+      ctx.font = "16px system-ui";
+      ctx.fillText(
+        "Press Start and gently follow each dot with your index finger.",
+        canvas.width/2,
+        canvas.height/2 + 22
+      );
+    }
+
+    function drawFrame() {
+      ctx.clearRect(0,0,canvas.width,canvas.height);
+
+      const grad = ctx.createLinearGradient(0,0,canvas.width,canvas.height);
+      grad.addColorStop(0,"#eff6ff");
+      grad.addColorStop(1,"#fae8ff");
+      ctx.fillStyle = grad;
+      ctx.fillRect(0,0,canvas.width,canvas.height);
+
+      // draw connecting path
+      if (currentPattern.length) {
+        ctx.strokeStyle = "#e5e7eb";
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        currentPattern.forEach((p, idx) => {
+          if (idx === 0) ctx.moveTo(p.x, p.y);
+          else ctx.lineTo(p.x, p.y);
+        });
+        ctx.stroke();
+      }
+
+      // draw dots
+      currentPattern.forEach((p, idx) => {
+        const isCurrent = idx === currentPointIndex;
+        const baseR = isCurrent ? hitRadius : hitRadius * 0.65;
+
+        // soft halo
+        ctx.beginPath();
+        ctx.fillStyle = isCurrent ? "rgba(34,197,94,0.18)" : "rgba(96,165,250,0.15)";
+        ctx.arc(p.x, p.y, baseR * 1.6, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.beginPath();
+        ctx.fillStyle = isCurrent ? "#22c55e" : "#60a5fa";
+        ctx.arc(p.x, p.y, baseR, 0, Math.PI*2);
+        ctx.fill();
+
+        ctx.beginPath();
+        ctx.fillStyle = "#ffffff";
+        ctx.arc(p.x, p.y, baseR * 0.45, 0, Math.PI*2);
+        ctx.fill();
+      });
+
+      // hand cursor
+      if (handPos) {
+        ctx.beginPath();
+        ctx.fillStyle = "#f97316";
+        ctx.arc(handPos.x, handPos.y, 10, 0, Math.PI*2);
+        ctx.fill();
+
+        ctx.beginPath();
+        ctx.fillStyle = "rgba(248, 196, 113, 0.45)";
+        ctx.arc(handPos.x, handPos.y, 18, 0, Math.PI*2);
+        ctx.fill();
+      }
+
+      if (running) {
+        requestAnimationFrame(drawFrame);
+      }
+    }
+
+    // -------------------------------------
+    // Mouse / touch fallback
+    // -------------------------------------
+    function pointerToCanvas(evt) {
+      const rect = canvas.getBoundingClientRect();
+      const x = (evt.clientX - rect.left) * (canvas.width / rect.width);
+      const y = (evt.clientY - rect.top) * (canvas.height / rect.height);
+      return { x, y };
+    }
+
+    canvas.addEventListener("pointermove", (evt) => {
+      const { x, y } = pointerToCanvas(evt);
+      const now = performance.now();
+      processPoint(x, y, now);
+    });
+
+    // -------------------------------------
+    // MediaPipe Hands setup
+    // -------------------------------------
+    let camera = null;
+
+    function onHandResults(results) {
+      if (!results.multiHandLandmarks || results.multiHandLandmarks.length === 0) {
+        return;
+      }
+      const hand = results.multiHandLandmarks[0];
+      const indexTip = hand[8]; // landmark 8 = index fingertip
+
+      // Convert normalized [0,1] coords to canvas coords
+      const x = (1 - indexTip.x) * canvas.width; // horizontal flip for more natural feel
+      const y = indexTip.y * canvas.height;
+
+      const now = performance.now();
+      processPoint(x, y, now);
+    }
+
+    function initHandTracking() {
+      try {
+        const hands = new Hands({
+          locateFile: (file) =>
+            `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`,
+        });
+        hands.setOptions({
+          maxNumHands: 1,
+          modelComplexity: 1,
+          minDetectionConfidence: 0.6,
+          minTrackingConfidence: 0.5,
+        });
+        hands.onResults(onHandResults);
+
+        videoElement.muted = true;
+
+        camera = new Camera(videoElement, {
+          onFrame: async () => {
+            await hands.send({ image: videoElement });
+          },
+          width: 640,
+          height: 480,
+        });
+
+        camera.start();
+        cameraIndicator.textContent =
+          "Camera ready. Gently move your index finger to control the dot.";
+
+      } catch (err) {
+        console.error("Error initializing MediaPipe Hands:", err);
+        cameraIndicator.textContent =
+          "Camera tracking unavailable. You can still use mouse or touch.";
+      }
+    }
+
+    async function tryEnableCamera() {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        cameraIndicator.textContent =
+          "Camera not available on this device. Mouse/touch will still work.";
+        return;
+      }
+      try {
+        // Just to prompt for permission nicely
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+        // Attach to video; Camera() will reuse this
+        videoElement.srcObject = stream;
+        videoElement.play().catch(() => {});
+        initHandTracking();
+      } catch (err) {
+        console.warn("User denied camera or no camera:", err);
+        cameraIndicator.textContent =
+          "Camera blocked. You can still play using mouse or touch.";
+      }
+    }
+
+    // -------------------------------------
+    // Session saving
+    // -------------------------------------
     async function sendSessionData() {
       const sessionDuration = (performance.now() - sessionStartTime) / 1000;
       const payload = {
@@ -395,22 +699,25 @@
       try {
         const res = await fetch(RECORD_SESSION_URL, {
           method: "POST",
-          headers: {"Content-Type": "application/json"},
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
         });
         if (res.ok) {
-          const data = await res.json();
-          statusEl.textContent = "Session saved ✔ You can view insights on your dashboard.";
+          statusEl.textContent =
+            "Session saved. You can see gentle insights on your dashboard.";
         } else {
           statusEl.textContent = "Could not save session (server error).";
         }
       } catch (err) {
         console.error(err);
-        statusEl.textContent = "Could not reach server – session not saved.";
+        statusEl.textContent =
+          "Could not reach the server – session not saved.";
       }
     }
 
-    // ---------- Buttons ----------
+    // -------------------------------------
+    // Buttons & init
+    // -------------------------------------
     startBtn.addEventListener("click", () => {
       startGame();
     });
@@ -421,8 +728,8 @@
       }
     });
 
-    // initial screen
-    resetSession();
+    resetSessionState();
+    tryEnableCamera();
   </script>
 </body>
 </html>
