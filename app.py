@@ -30,7 +30,7 @@ from models import db, User, GameSession, ProgressData, AIInsight
 from ai_analysis import AnalysisEngine
 from game_config import GameConfig
 import re
-import google.generativeai as genai
+
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta/models"
