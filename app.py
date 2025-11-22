@@ -35,6 +35,7 @@ import google.generativeai as genai
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 if GEMINI_API_KEY:
     genai.configure(api_key=GEMINI_API_KEY)
+    gemini_model = genai.GenerativeModel("gemini-1.5-flash")
 else:
     print("⚠ GEMINI_API_KEY is not set – Gemini chatbot/report will be disabled.")
 
@@ -686,15 +687,21 @@ def chat():
         f"The parent/therapist says:\n\"{user_message}\"\n\n"
         f"Answer clearly and kindly in under about 250 words."
     )
-
+    
     try:
-        model = genai.GenerativeModel("gemini-1.5-flash")
-        resp = model.generate_content(prompt)
-        reply_text = resp.text or "I’m having trouble responding right now. Please try again later."
-        return jsonify({ "reply": reply_text })
+        resp = gemini_model.generate_content(
+            prompt,
+            request_options={"timeout": 8},  # seconds
+        )
+        reply_text = (resp.text or "").strip()
+        if not reply_text:
+            raise RuntimeError("Empty response from Gemini")
+        return jsonify({"reply": reply_text})
     except Exception as e:
-        print("Gemini chat error:", e)
-        return jsonify({"error": "Failed to generate response"}), 500
+        print("Gemini chat error:", repr(e))
+        return jsonify({
+            "error": "Sorry, the AI helper is having trouble right now. Please try again later."
+        }), 502
 
 #Gemini narrative report
 
