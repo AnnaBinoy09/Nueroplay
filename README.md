@@ -39,7 +39,7 @@ A Flask-based web application that provides therapeutic games for children with 
 
 5. **Access the application:**
    Open http://localhost:5000 in your browser
-   or deployed : Click on : web-production-777e8.up.railway.app
+   or deployed : Click on : https://web-production-777e8.up.railway.app/
 
 ## Usage
 
